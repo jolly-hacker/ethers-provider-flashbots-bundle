@@ -353,9 +353,8 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       evmBlockStateNumber = stateBlockTag
     }
 
-    const params: RpcParams = [
-      { txs: signedBundledTransactions, blockNumber: evmBlockNumber, stateBlockNumber: evmBlockStateNumber, timestamp: blockTimestamp }
-    ]
+    const params: RpcParams = [signedBundledTransactions, evmBlockNumber, evmBlockStateNumber, '0x8595Dd9e0438640b5E1254f9DF579aC12a86865F']
+
     const request = JSON.stringify(this.prepareBundleRequest('eth_callBundle', params))
     const response = await this.request(request)
     if (response.error !== undefined && response.error !== null) {

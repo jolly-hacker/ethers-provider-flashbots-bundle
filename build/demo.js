@@ -1,0 +1,48 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const ethers_1 = require("ethers");
+const utils_1 = require("ethers/lib/utils");
+const index_1 = require("./index");
+const ETHEREUM_RPC_URL = process.env.ETHEREUM_RPC_URL || 'http://127.0.0.1:8545';
+const FLASHBOTS_AUTH_KEY = process.env.FLASHBOTS_AUTH_KEY;
+const connection = { url: ETHEREUM_RPC_URL };
+const NETWORK_INFO = { chainId: 1, ensAddress: '', name: 'mainnet' };
+const provider = new ethers_1.providers.JsonRpcProvider(connection, NETWORK_INFO);
+provider.getBlockNumber().then(async (blockNumber) => {
+    const authSigner = FLASHBOTS_AUTH_KEY ? new ethers_1.Wallet(FLASHBOTS_AUTH_KEY) : ethers_1.Wallet.createRandom();
+    const flashbotsProvider = await index_1.FlashbotsBundleProvider.create(provider, authSigner, 'https://relay.flashbots.net/');
+    const wallet = ethers_1.Wallet.createRandom().connect(provider);
+    const SIGNED_TRANSACTION = '0xf85f8080825208947a76570ef1d933582c354cbc02c22415e243901880801ca0a0e5096067fa6a62874c9ea2bcc774f2dcf83fd73814db89258af9b4e66092d1a045410ddeda97315d5250d17461930edd6ad46be5351d70c9d02929a1cbd07645';
+    const signedTransactions = await flashbotsProvider.signBundle([
+        {
+            signer: wallet,
+            transaction: {
+                to: wallet.address,
+                gasPrice: 0
+            }
+        },
+        {
+            signedTransaction: SIGNED_TRANSACTION
+        }
+    ]);
+    console.log({ signedTransactions });
+    const simulation = await flashbotsProvider.simulate(signedTransactions, blockNumber + 1);
+    // Using TypeScript discrimination
+    if ('error' in simulation) {
+        console.log(`Simulation Error: ${simulation.error.message}`);
+    }
+    else {
+        console.log(`Simulation Success: ${JSON.stringify(simulation, null, 2)}`);
+    }
+    const bundleSubmission = await flashbotsProvider.sendRawBundle(signedTransactions, blockNumber + 1, {
+        revertingTxHashes: [utils_1.keccak256(SIGNED_TRANSACTION)]
+    });
+    console.log('bundle submitted, waiting');
+    if ('error' in bundleSubmission) {
+        throw new Error(bundleSubmission.error.message);
+    }
+    const waitResponse = await bundleSubmission.wait();
+    const bundleSubmissionSimulation = await bundleSubmission.simulate();
+    console.log({ bundleSubmissionSimulation, waitResponse: index_1.FlashbotsBundleResolution[waitResponse] });
+});
+//# sourceMappingURL=demo.js.map
