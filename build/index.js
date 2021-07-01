@@ -84,6 +84,7 @@ class FlashbotsBundleProvider extends ethers_1.providers.JsonRpcProvider {
             bundleTransactions,
             wait: () => this.wait(bundleTransactions, targetBlockNumber, TIMEOUT_MS),
             simulate: () => this.simulate(bundleTransactions.map((tx) => tx.signedTransaction), targetBlockNumber, undefined, opts === null || opts === void 0 ? void 0 : opts.minTimestamp),
+            simulateOld: () => this.simulateOld(bundleTransactions.map((tx) => tx.signedTransaction), targetBlockNumber, undefined, opts === null || opts === void 0 ? void 0 : opts.minTimestamp),
             receipts: () => this.fetchReceipts(bundleTransactions)
         };
     }
@@ -198,6 +199,48 @@ class FlashbotsBundleProvider extends ethers_1.providers.JsonRpcProvider {
         return response.result;
     }
     async simulate(signedBundledTransactions, blockTag, stateBlockTag, blockTimestamp) {
+        let evmBlockNumber;
+        if (typeof blockTag === 'number') {
+            evmBlockNumber = `0x${blockTag.toString(16)}`;
+        }
+        else {
+            const blockTagDetails = await this.genericProvider.getBlock(blockTag);
+            const blockDetails = blockTagDetails !== null ? blockTagDetails : await this.genericProvider.getBlock('latest');
+            evmBlockNumber = `0x${blockDetails.number.toString(16)}`;
+        }
+        let evmBlockStateNumber;
+        if (typeof stateBlockTag === 'number') {
+            evmBlockStateNumber = `0x${stateBlockTag.toString(16)}`;
+        }
+        else if (!stateBlockTag) {
+            evmBlockStateNumber = 'latest';
+        }
+        else {
+            evmBlockStateNumber = stateBlockTag;
+        }
+        const params = [
+            { txs: signedBundledTransactions, blockNumber: evmBlockNumber, stateBlockNumber: evmBlockStateNumber, timestamp: blockTimestamp }
+        ];
+        const request = JSON.stringify(this.prepareBundleRequest('eth_callBundle', params));
+        const response = await this.request(request);
+        if (response.error !== undefined && response.error !== null) {
+            return {
+                error: {
+                    message: response.error.message,
+                    code: response.error.code
+                }
+            };
+        }
+        const callResult = response.result;
+        return {
+            bundleHash: callResult.bundleHash,
+            coinbaseDiff: ethers_1.BigNumber.from(callResult.coinbaseDiff),
+            results: callResult.results,
+            totalGasUsed: callResult.results.reduce((a, b) => a + b.gasUsed, 0),
+            firstRevert: callResult.results.find((txSim) => 'revert' in txSim)
+        };
+    }
+    async simulateOld(signedBundledTransactions, blockTag, stateBlockTag, blockTimestamp) {
         let evmBlockNumber;
         if (typeof blockTag === 'number') {
             evmBlockNumber = `0x${blockTag.toString(16)}`;

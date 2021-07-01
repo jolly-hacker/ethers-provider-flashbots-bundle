@@ -39,6 +39,7 @@ export interface FlashbotsTransactionResponse {
   bundleTransactions: Array<TransactionAccountNonce>
   wait: () => Promise<FlashbotsBundleResolution>
   simulate: () => Promise<SimulationResponse>
+  simulateOld: () => Promise<SimulationResponse>
   receipts: () => Promise<Array<TransactionReceipt>>
 }
 
@@ -204,6 +205,13 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
           undefined,
           opts?.minTimestamp
         ),
+      simulateOld: () =>
+        this.simulateOld(
+          bundleTransactions.map((tx) => tx.signedTransaction),
+          targetBlockNumber,
+          undefined,
+          opts?.minTimestamp
+        ),
       receipts: () => this.fetchReceipts(bundleTransactions)
     }
   }
@@ -330,6 +338,55 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   }
 
   public async simulate(
+    signedBundledTransactions: Array<string>,
+    blockTag: BlockTag,
+    stateBlockTag?: BlockTag,
+    blockTimestamp?: number
+  ): Promise<SimulationResponse> {
+    let evmBlockNumber: string
+    if (typeof blockTag === 'number') {
+      evmBlockNumber = `0x${blockTag.toString(16)}`
+    } else {
+      const blockTagDetails = await this.genericProvider.getBlock(blockTag)
+      const blockDetails = blockTagDetails !== null ? blockTagDetails : await this.genericProvider.getBlock('latest')
+      evmBlockNumber = `0x${blockDetails.number.toString(16)}`
+    }
+
+    let evmBlockStateNumber: string
+    if (typeof stateBlockTag === 'number') {
+      evmBlockStateNumber = `0x${stateBlockTag.toString(16)}`
+    } else if (!stateBlockTag) {
+      evmBlockStateNumber = 'latest'
+    } else {
+      evmBlockStateNumber = stateBlockTag
+    }
+
+    const params: RpcParams = [
+      { txs: signedBundledTransactions, blockNumber: evmBlockNumber, stateBlockNumber: evmBlockStateNumber, timestamp: blockTimestamp }
+    ]
+
+    const request = JSON.stringify(this.prepareBundleRequest('eth_callBundle', params))
+    const response = await this.request(request)
+    if (response.error !== undefined && response.error !== null) {
+      return {
+        error: {
+          message: response.error.message,
+          code: response.error.code
+        }
+      }
+    }
+
+    const callResult = response.result
+    return {
+      bundleHash: callResult.bundleHash,
+      coinbaseDiff: BigNumber.from(callResult.coinbaseDiff),
+      results: callResult.results,
+      totalGasUsed: callResult.results.reduce((a: number, b: TransactionSimulation) => a + b.gasUsed, 0),
+      firstRevert: callResult.results.find((txSim: TransactionSimulation) => 'revert' in txSim)
+    }
+  }
+
+  public async simulateOld(
     signedBundledTransactions: Array<string>,
     blockTag: BlockTag,
     stateBlockTag?: BlockTag,

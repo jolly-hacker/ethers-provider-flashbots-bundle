@@ -31,6 +31,7 @@ export interface FlashbotsTransactionResponse {
     bundleTransactions: Array<TransactionAccountNonce>;
     wait: () => Promise<FlashbotsBundleResolution>;
     simulate: () => Promise<SimulationResponse>;
+    simulateOld: () => Promise<SimulationResponse>;
     receipts: () => Promise<Array<TransactionReceipt>>;
 }
 export interface TransactionSimulationBase {
@@ -97,6 +98,7 @@ export declare class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     private wait;
     getUserStats(): Promise<GetUserStatsResponse>;
     simulate(signedBundledTransactions: Array<string>, blockTag: BlockTag, stateBlockTag?: BlockTag, blockTimestamp?: number): Promise<SimulationResponse>;
+    simulateOld(signedBundledTransactions: Array<string>, blockTag: BlockTag, stateBlockTag?: BlockTag, blockTimestamp?: number): Promise<SimulationResponse>;
     private request;
     private fetchReceipts;
     private prepareBundleRequest;
